@@ -1,0 +1,47 @@
+# Data. Never commit imagery or the instrument cache.
+data/
+cache/
+*.tif
+*.tiff
+*.nc
+*.zarr/
+*.h5
+
+# Outputs. Commit the tables, not the artifacts.
+out/
+outputs/
+*.parquet
+*.geoparquet
+*.pt
+*.pth
+*.json.gz
+
+# Profiler traces are large. Commit only the ones in the writeup.
+traces/
+*.pt.trace.json
+
+# Credentials
+.netrc
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Ray
+/tmp/ray/
+ray_results/
+
+# OS
+.DS_Store
