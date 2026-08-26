@@ -12,6 +12,7 @@ its measurements into.
   measured.
 * :mod:`burn_scar_recovery.ids` -- chip identifiers, derived not assigned.
 * :mod:`burn_scar_recovery.crs` -- read in UTM, write 4326, measure area in 5070.
+* :mod:`burn_scar_recovery.sizes` -- what a configuration required, computed.
 * :mod:`burn_scar_recovery.byte_counter` -- the bytes that crossed the network.
 * :mod:`burn_scar_recovery.report` -- the README tables, generated from results.
 """
@@ -22,12 +23,14 @@ from burn_scar_recovery.crs import AREA_CRS, WRITE_CRS, area_hectares, utm_crs_f
 from burn_scar_recovery.ids import chip_id, chip_origins, parse_chip_id
 from burn_scar_recovery.log import configure_logging, get_logger
 from burn_scar_recovery.runs import RunConfig, RunRecord, append_run, load_runs
+from burn_scar_recovery.sizes import AssetSizeIndex, content_length, saving
 
 __version__ = "0.1.0"
 
 __all__ = [
     "AREA_CRS",
     "WRITE_CRS",
+    "AssetSizeIndex",
     "ByteCounter",
     "RunConfig",
     "RunRecord",
@@ -39,9 +42,11 @@ __all__ = [
     "chip_id",
     "chip_origins",
     "configure_logging",
+    "content_length",
     "get_logger",
     "get_settings",
     "load_runs",
     "parse_chip_id",
+    "saving",
     "utm_crs_for_mgrs",
 ]
