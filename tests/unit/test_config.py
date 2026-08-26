@@ -1,4 +1,9 @@
-"""Tests for settings and the chip-plan arithmetic derived from them."""
+"""Tests for settings: what the machine provides.
+
+The chip plan is deliberately not here. It lives on ``RunConfig`` because
+phase 4 sweeps the stride, and a swept knob must be inside the hashed
+configuration. See ``test_runs.py``.
+"""
 
 from __future__ import annotations
 
@@ -14,26 +19,21 @@ def test_version_is_exported() -> None:
 
 def test_defaults_match_the_roadmap() -> None:
     settings = Settings()
-    # Three tiles of southern California chaparral, and the data is in-region.
+    # HLS sits in us-west-2. Reading from elsewhere adds latency to every
+    # range request, which is the thing the project measures.
     assert settings.aws_region == "us-west-2"
     assert settings.cmr_stac_url.startswith("https://")
-    # 224 chip, 192 stride. Phase 4.
-    assert settings.chip_size == 224
-    assert settings.chip_stride == 192
 
 
-def test_halo_comes_out_of_the_stride() -> None:
-    assert Settings(chip_size=224, chip_stride=192).halo == 16
-    assert Settings(chip_size=224, chip_stride=208).halo == 8
+def test_chip_plan_is_not_on_settings() -> None:
+    """A swept knob on Settings would hash identically across a sweep.
 
-
-@pytest.mark.parametrize(
-    ("stride", "expected"),
-    [(208, 1.16), (192, 1.36), (176, 1.62), (160, 1.96)],
-)
-def test_read_amplification_matches_the_roadmap_table(stride: int, expected: float) -> None:
-    """The stride/amplification table in ROADMAP.md phase 4."""
-    assert Settings(chip_stride=stride).read_amplification == pytest.approx(expected, abs=0.005)
+    Phase 4 sweeps the stride. If it lived here rather than on RunConfig,
+    every run of that sweep would share a run ID and the results table would
+    compare unlike things while claiming they were the same.
+    """
+    assert "chip_size" not in Settings.model_fields
+    assert "chip_stride" not in Settings.model_fields
 
 
 def test_secrets_are_not_in_the_repr() -> None:
@@ -44,10 +44,9 @@ def test_secrets_are_not_in_the_repr() -> None:
 
 
 def test_settings_are_frozen() -> None:
-    """A run config is immutable; its hash is the run ID."""
     settings = Settings()
     with pytest.raises(ValidationError):
-        settings.chip_size = 128
+        settings.aws_region = "eu-west-1"
 
 
 def test_logger_is_usable() -> None:
