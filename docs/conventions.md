@@ -91,18 +91,41 @@ Both fields are necessary. One field alone hides the waste.
 the rows of the result table incomparable, and the table is the
 output of the project.
 
-`rasterio` does not report bytes over the network. The method:
+`rasterio` does not report bytes over the network. The method was:
 
 1. Set `CPL_DEBUG=ON`.
 2. Capture the GDAL VSICURL log through a Python error handler.
 3. Sum the byte ranges of the requests.
 
-Validate the counter once against process-level network counters, on
-a read of known size. Then trust it.
+**That method does not work, and the validation caught it.** Do not
+use it for a byte figure. GDAL emits a `Downloading a-b` line only
+for a chunk it pulls into its cache, so bulk data transfer produces
+no line. Measured against a public Copernicus DEM COG, a 256 pixel
+window and a 1024 pixel window both report 16384 bytes, which is the
+header fetch alone. The larger read returns a full float32 block
+with a million distinct values, so the data plainly crossed the
+network.
 
-Keep a second, analytic count: the number of windows multiplied by
-the block size. It does not replace the primary counter. It catches
-a read that the pipeline drops without an error.
+**The measurement method is an open decision.** See
+`decisions.md`. Until it is settled, no row of the read-path table
+can be filled.
+
+What the log-based counter does measure reliably:
+
+- The **request count**. Small reads are latency bound, so this
+  explains a poor throughput figure when the byte total looks fine.
+- The **header fetch**, which is a real cost and worth knowing.
+
+**GDAL's VSICURL cache is process-global.** A second read of the
+same ranges costs zero bytes. A benchmark that re-reads a tile
+inside one process therefore records a saving that is entirely
+cache. Every measured run must use a fresh process, or must set
+`CPL_VSIL_CURL_NON_CACHED`. Phase 2 already lists `VSI_CACHE` as a
+knob to measure. This makes it a correctness concern as well.
+
+Keep a second, analytic count: the number of blocks touched
+multiplied by the block size. It does not replace a primary counter.
+It catches a read that the pipeline drops without an error.
 
 ## Result tables
 

@@ -186,6 +186,55 @@ must remember, and becomes a property of the architecture.
 
 ---
 
+## 2026-08-26. The GDAL debug log does not measure bytes
+
+`conventions.md` prescribed a byte counter that reads GDAL's VSICURL
+debug log and sums the `Downloading a-b` ranges. Phase 0.5 built it
+and validated it against a public Copernicus DEM COG, which needs no
+Earthdata login. **The validation failed.**
+
+GDAL emits that line only for a chunk it pulls into its cache. Bulk
+data transfer produces no line at all. A 256 pixel window and a 1024
+pixel window both report 16384 bytes, the header fetch alone, while
+the larger read returns a full float32 block with a million distinct
+values.
+
+The counter is kept, because the request count and the header fetch
+are real and useful. It carries a warning, and the gap is pinned by
+a strict `xfail` test, so a GDAL upgrade that fixes it fails loudly
+rather than passing unnoticed.
+
+**Why this matters more than one broken module.** Every row of the
+read-path table is a byte count. An instrument that under-reports
+would have made every pushdown look better than it is, and the
+project's headline conclusion is a ratio of bytes to compute. This is
+the argument for phase 0.5 existing at all, and it paid for itself
+before phase 1 read anything.
+
+Candidate replacements, none chosen yet:
+
+| Method | Note |
+| --- | --- |
+| A local counting proxy | Counts bytes on the wire, keeps GDAL's real behaviour including multiplexing. Most accurate. Most work |
+| System network counters | Simple. Per-process network IO is not available on macOS, so it counts the whole machine and needs an otherwise idle host |
+| Analytic only | Deterministic and cheap, but it is a model and not a measurement. The project asks for observed bytes |
+
+---
+
+## 2026-08-26. GDAL's VSICURL cache is process-global
+
+Found during the same validation. A second read of the same byte
+ranges inside one process costs zero.
+
+A benchmark that re-reads a tile in one process therefore records a
+saving that is entirely cache and not a pushdown. Every measured run
+must use a fresh process, or must set `CPL_VSIL_CURL_NON_CACHED`.
+
+Phase 2 already lists `VSI_CACHE` as a knob to measure. This
+promotes it from a tuning knob to a correctness concern.
+
+---
+
 ## Open decisions
 
 These need data. Do not decide them in advance.
@@ -198,3 +247,4 @@ These need data. Do not decide them in advance.
 | The stride | 4 | The smallest halo that removes the edge artifacts |
 | The scar link overlap threshold | 5 | See `conventions.md` |
 | The exact Prithvi checkpoint | 0 | Pin it, or a gate failure is ambiguous |
+| **How to measure bytes** | 0.5 | The debug-log method failed validation. Blocks every read-path row |
