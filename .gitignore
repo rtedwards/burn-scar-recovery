@@ -1,20 +1,41 @@
 # Data. Never commit imagery or the instrument cache.
+# The corpus is ~580 GB and is never pre-downloaded; the chip cache is ~10 GB
+# on NVMe and is an instrument, not a data store. Neither goes in git.
 data/
 cache/
+chips/
 *.tif
 *.tiff
+*.tif.aux.xml
+*.jp2
 *.nc
 *.zarr/
 *.h5
+*.hdf
+# MTBS / Copernicus DEM / ESA WorldCover downloads.
+*.shp
+*.shx
+*.dbf
+*.prj
+*.gpkg
+*.gdb/
+
+# Model weights. Pull the Prithvi burn scar head from the hub, do not vendor it.
+*.pt
+*.pth
+*.safetensors
+*.ckpt
 
 # Outputs. Commit the tables, not the artifacts.
 out/
 outputs/
 *.parquet
 *.geoparquet
-*.pt
-*.pth
+*.arrow
+*.feather
 *.json.gz
+# results/ IS tracked -- the measurements are the deliverable -- but the
+# artifacts they were derived from are covered by the patterns above.
 
 # Profiler traces are large. Commit only the ones in the writeup.
 traces/
@@ -38,10 +59,27 @@ build/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.python-version.local
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Ray
 /tmp/ray/
 ray_results/
+.ray/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Local scratch
+TRASH/
 
 # OS
 .DS_Store
+._*
