@@ -126,13 +126,37 @@ def test_canonical_json_sorts_keys() -> None:
 # -- Derived measurements ----------------------------------------------------
 
 
-def test_read_amplification_is_none_without_a_denominator() -> None:
-    assert _record().read_amplification is None
+def test_saving_is_computed_from_the_baseline() -> None:
+    """The pushdown claim. Computed, so it holds at any link speed."""
+    record = _record(bytes_required=250, bytes_baseline=1000)
+    assert record.saved_fraction == pytest.approx(0.75)
 
 
-def test_read_amplification_divides_read_by_needed() -> None:
-    record = _record(bytes_read=136, bytes_needed=100)
+def test_saving_is_none_without_a_baseline() -> None:
+    assert _record(bytes_required=250).saved_fraction is None
+
+
+def test_read_amplification_needs_wire_observation() -> None:
+    """It is the one figure that cannot be computed.
+
+    Defaulting it to 1.0 from analytic figures alone would invent a
+    measurement, and would claim the alignment row was filled when it was not.
+    """
+    assert _record(bytes_required=100).read_amplification is None
+
+
+def test_read_amplification_divides_observed_by_required() -> None:
+    record = _record(bytes_required=100, bytes_observed=136, accounting="both")
     assert record.read_amplification == pytest.approx(1.36)
+
+
+def test_accounting_defaults_to_analytic() -> None:
+    assert _record().accounting == "analytic"
+
+
+def test_accounting_rejects_an_unknown_provenance() -> None:
+    with pytest.raises(ValidationError):
+        _record(accounting="guessed")
 
 
 def test_rates_are_none_when_the_run_was_not_timed() -> None:
@@ -141,8 +165,19 @@ def test_rates_are_none_when_the_run_was_not_timed() -> None:
     assert record.megabytes_per_second is None
 
 
+def test_throughput_needs_observed_bytes() -> None:
+    """MB/s is a wire figure; required bytes cannot stand in for it."""
+    record = _record(bytes_required=2_000_000, wall_seconds=2.0)
+    assert record.megabytes_per_second is None
+
+
 def test_rates_divide_by_wall_time() -> None:
-    record = _record(chips_total=100, bytes_read=2_000_000, wall_seconds=2.0)
+    record = _record(
+        chips_total=100,
+        bytes_observed=2_000_000,
+        wall_seconds=2.0,
+        accounting="both",
+    )
     assert record.chips_per_second == pytest.approx(50.0)
     assert record.megabytes_per_second == pytest.approx(1.0)
 
@@ -151,14 +186,14 @@ def test_rates_divide_by_wall_time() -> None:
 
 
 def test_append_then_load_round_trips(tmp_path: Path) -> None:
-    first = _record(label="naive", bytes_read=10)
-    second = _record(label="+ predicate pushdown", bytes_read=5)
+    first = _record(label="naive", bytes_required=10)
+    second = _record(label="+ predicate pushdown", bytes_required=5)
     append_run(first, tmp_path)
     append_run(second, tmp_path)
 
     loaded = load_runs(tmp_path)
     assert [record.label for record in loaded] == ["naive", "+ predicate pushdown"]
-    assert loaded[1].bytes_read == 5
+    assert loaded[1].bytes_required == 5
     assert loaded[0].config == first.config
 
 

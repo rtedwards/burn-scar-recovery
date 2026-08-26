@@ -36,6 +36,15 @@ _LOG: Final = get_logger(__name__)
 
 _MISSING: Final = ""
 
+#: Shown in the Source column. A reader must be able to tell at a glance which
+#: figures were computed from file sizes and which were observed on the wire.
+#: Both are legitimate; conflating them is not.
+_SOURCE_LABEL: Final = {
+    "analytic": "computed",
+    "wire": "measured",
+    "both": "computed + measured",
+}
+
 
 def _marker_pattern(section: str) -> re.Pattern[str]:
     return re.compile(
@@ -76,6 +85,11 @@ def render_read_path_table(records: list[RunRecord]) -> str:
     Bytes come first and wall time second, which is the order the project
     reports in and the order the columns are read in.
 
+    The Source column is not decoration. Most pushdown rows are computed
+    exactly from asset sizes, which is the better instrument for a claim that
+    is meant to hold at any link speed. Read amplification is the exception:
+    it can only be observed. A reader must be able to tell which is which.
+
     Args:
         records: Run records, oldest first. One row is emitted for each.
 
@@ -83,22 +97,22 @@ def render_read_path_table(records: list[RunRecord]) -> str:
         A markdown table, without surrounding blank lines.
     """
     header = (
-        "| Configuration | Bytes read | Read amp | Wall time | GPU util | Chips/s |\n"
-        "| --- | --- | --- | --- | --- | --- |"
+        "| Configuration | Bytes required | Saved vs naive | Source | "
+        "Read amp | Wall time | GPU util |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |"
     )
-    rows = [
-        "| {label} | {read} | {amp} | {wall} | {gpu} | {rate} |".format(
-            label=record.label,
-            read=_bytes_column(record.bytes_read),
-            amp=_ratio_column(record.read_amplification),
-            wall=_seconds_column(record.wall_seconds),
-            gpu=_percent_column(record.gpu_utilization),
-            rate=(
-                _MISSING if record.chips_per_second is None else f"{record.chips_per_second:.0f}"
-            ),
-        )
-        for record in records
-    ]
+    rows = []
+    for record in records:
+        columns = [
+            record.label,
+            _bytes_column(record.bytes_required),
+            _percent_column(record.saved_fraction),
+            _SOURCE_LABEL[record.accounting],
+            _ratio_column(record.read_amplification),
+            _seconds_column(record.wall_seconds),
+            _percent_column(record.gpu_utilization),
+        ]
+        rows.append("| " + " | ".join(columns) + " |")
     return "\n".join([header, *rows])
 
 

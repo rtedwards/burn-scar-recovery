@@ -47,7 +47,24 @@ def test_table_has_a_row_for_each_run() -> None:
 def test_bytes_come_before_seconds() -> None:
     """The project reports bytes first; the columns read in that order."""
     header = render_read_path_table([]).splitlines()[0]
-    assert header.index("Bytes read") < header.index("Wall time")
+    assert header.index("Bytes required") < header.index("Wall time")
+
+
+def test_the_table_says_whether_a_figure_was_computed_or_measured() -> None:
+    """A computed number presented as a measurement is the drift to avoid."""
+    computed = render_read_path_table([_record(bytes_required=1_000_000_000)])
+    assert "computed" in computed
+    measured = render_read_path_table(
+        [_record(bytes_required=1_000_000_000, bytes_observed=2_000_000_000, accounting="both")]
+    )
+    assert "computed + measured" in measured
+
+
+def test_saving_is_shown_as_a_percentage() -> None:
+    row = render_read_path_table(
+        [_record(bytes_required=250_000_000, bytes_baseline=1_000_000_000)]
+    ).splitlines()[-1]
+    assert "75%" in row
 
 
 def test_unmeasured_columns_are_blank_rather_than_zero() -> None:
@@ -59,14 +76,15 @@ def test_unmeasured_columns_are_blank_rather_than_zero() -> None:
 
 def test_measured_values_are_formatted() -> None:
     record = _record(
-        bytes_read=377_000_000_000,
-        bytes_needed=277_205_882_352,
+        bytes_required=277_205_882_352,
+        bytes_observed=377_000_000_000,
+        accounting="both",
         wall_seconds=15_120.0,
         gpu_utilization=0.42,
         chips_total=850_000,
     )
     row = render_read_path_table([record]).splitlines()[-1]
-    assert "377.0 GB" in row
+    assert "277.2 GB" in row
     assert "1.36x" in row
     assert "4.20 h" in row
     assert "42%" in row
@@ -110,13 +128,13 @@ def test_no_runs_leaves_the_readme_alone(tmp_path: Path) -> None:
 def test_a_run_is_written_in(tmp_path: Path) -> None:
     readme = tmp_path / "README.md"
     readme.write_text(_DOC, encoding="utf-8")
-    assert update_readme(readme, [_record(bytes_read=1_000_000_000)]) is True
+    assert update_readme(readme, [_record(bytes_required=1_000_000_000)]) is True
     assert "1.0 GB" in readme.read_text(encoding="utf-8")
 
 
 def test_rerunning_with_the_same_data_reports_no_change(tmp_path: Path) -> None:
     readme = tmp_path / "README.md"
     readme.write_text(_DOC, encoding="utf-8")
-    records = [_record(bytes_read=1_000_000_000)]
+    records = [_record(bytes_required=1_000_000_000)]
     assert update_readme(readme, records) is True
     assert update_readme(readme, records) is False

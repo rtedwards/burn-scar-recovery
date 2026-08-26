@@ -27,7 +27,7 @@ import platform
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Final, Self
+from typing import Any, Final, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -192,8 +192,30 @@ class RunRecord(BaseModel):
     # -- The measurements -----------------------------------------------------
     # Bytes first. Bytes saved is a property of the pipeline and holds at any
     # link speed. Seconds is a property of the machine this ran on.
-    bytes_read: int = Field(default=0, ge=0, description="Bytes off the network.")
-    bytes_needed: int = Field(default=0, ge=0, description="Bytes the pipeline used.")
+    #
+    # Provenance is explicit, because most pushdown rows are COMPUTED rather
+    # than observed and a column labelled "bytes read" that actually holds
+    # "bytes required" is exactly the quiet drift this project avoids
+    # elsewhere. See burn_scar_recovery.sizes and docs/conventions.md.
+    accounting: Literal["analytic", "wire", "both"] = Field(
+        default="analytic",
+        description="How the byte figures below were arrived at.",
+    )
+    bytes_required: int = Field(
+        default=0,
+        ge=0,
+        description="Computed exactly: summed sizes of the assets this config needs.",
+    )
+    bytes_baseline: int = Field(
+        default=0,
+        ge=0,
+        description="Computed exactly: what a naive read of the same extent needs.",
+    )
+    bytes_observed: int | None = Field(
+        default=None,
+        ge=0,
+        description="Measured on the wire. Only set where wire observation ran.",
+    )
     requests: int = Field(default=0, ge=0)
     tile_dates: int = Field(default=0, ge=0)
     chips_total: int = Field(default=0, ge=0)
@@ -203,11 +225,28 @@ class RunRecord(BaseModel):
     notes: str = ""
 
     @property
-    def read_amplification(self) -> float | None:
-        """Bytes read for each byte used. ``None`` when nothing was needed."""
-        if self.bytes_needed == 0:
+    def saved_fraction(self) -> float | None:
+        """Fraction of the naive read this configuration avoided.
+
+        This is the pushdown claim, and it is computed rather than measured, so
+        it holds at any link speed and on any machine.
+        """
+        if self.bytes_baseline <= 0:
             return None
-        return self.bytes_read / self.bytes_needed
+        return 1.0 - (self.bytes_required / self.bytes_baseline)
+
+    @property
+    def read_amplification(self) -> float | None:
+        """Bytes actually fetched for each byte required.
+
+        ``None`` unless wire observation ran. This is the one figure that
+        cannot be computed: the gap between blocks needed and bytes pulled
+        comes from GDAL's fetch granularity, which is the thing phase 2
+        measures rather than models.
+        """
+        if self.bytes_observed is None or self.bytes_required == 0:
+            return None
+        return self.bytes_observed / self.bytes_required
 
     @property
     def chips_per_second(self) -> float | None:
@@ -219,9 +258,9 @@ class RunRecord(BaseModel):
     @property
     def megabytes_per_second(self) -> float | None:
         """Sustained read rate. ``None`` when the run was not timed."""
-        if self.wall_seconds == 0.0:
+        if self.wall_seconds == 0.0 or self.bytes_observed is None:
             return None
-        return self.bytes_read / self.wall_seconds / 1_000_000
+        return self.bytes_observed / self.wall_seconds / 1_000_000
 
 
 def append_run(record: RunRecord, results_dir: Path) -> Path:
