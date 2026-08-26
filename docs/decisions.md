@@ -148,6 +148,44 @@ use `--no-verify` as a habit. Then the hook protects nothing.
 
 ---
 
+## 2026-08-26. Three views. Python for the gates, TypeScript for the artifact
+
+Full detail in `visualization.md`. The reasoning, in short:
+
+**Views A and B need no map, because both use a fixed extent.** A
+chip is already pixel space. The scar recovery view fixes its extent
+from the first date and never moves it, so Python projects the
+polygon to pixel coordinates once, at export. The browser then draws
+an image and an SVG path in one coordinate frame.
+
+**View C needs deck.gl.** Every scar over three tiles and eight
+years, over a basemap, with pan and zoom, is runtime reprojection
+plus tiles plus a large feature count. That is the workload a map
+library exists for.
+
+**Python for phases 0, 4 and 5. TypeScript for phases 9 and 11.**
+The gates are a dev loop where the picture must arrive in 30
+seconds, and the code is throwaway. The phase 11 output is a
+published artifact that a reader sees. A web application to inspect
+20 chips during a gate is the tail that wags the dog. A notebook
+screenshot as the headline artifact is the same error reversed.
+
+**A superseded draft proposed FiftyOne, lonboard and Panel for
+everything.** That was wrong. It applied a "do not rebuild dataset
+tooling" heuristic without checking it against this project's scale.
+The phase 0 gate looks at approximately 20 chips, where per-chip IoU
+is three lines of NumPy, and FiftyOne carries a MongoDB that would
+sit between a reader and the phase 11 reproduce path. The correction
+is not "never use a library". It is match the tool to the scale,
+which is why View C still uses deck.gl.
+
+**A structural benefit of the browser.** A web application cannot
+import a pipeline stage and cannot read S3. The rule that the viewer
+stays outside the measured path stops being something a developer
+must remember, and becomes a property of the architecture.
+
+---
+
 ## Open decisions
 
 These need data. Do not decide them in advance.

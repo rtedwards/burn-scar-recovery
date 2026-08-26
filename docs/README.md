@@ -10,6 +10,7 @@ that both of those documents assume.
 | [conventions.md](conventions.md) | Identifiers, coordinate systems, run records | You write data to disk |
 | [data-sources.md](data-sources.md) | The datasets, the bands, the access rules | You read a new dataset |
 | [decisions.md](decisions.md) | The decision log, with the reason for each | A decision looks arbitrary |
+| [visualization.md](visualization.md) | The three views, and which one needs a map | You build or change a viewer |
 
 ## How to use these files
 

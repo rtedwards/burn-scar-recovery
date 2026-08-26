@@ -49,6 +49,7 @@ pipeline. Seconds is a property of the machine.
 | `docs/conventions.md` | Identifiers, coordinate systems, run records |
 | `docs/data-sources.md` | The datasets, the bands, the access rules |
 | `docs/decisions.md` | The decision log, with the reason for each |
+| `docs/visualization.md` | The three views, and which one needs a map |
 
 Read `ROADMAP.md` before you start work on a phase. It gives the
 measurement that each phase must produce. A phase is not complete

@@ -296,6 +296,10 @@ costs read amplification.
 | 160 | 32 | 1.96x |
 
 - **Measure:** the smallest halo that kills the edge artifacts.
+- **This one needs eyes.** No number tells you the seam is gone, so
+  the chip view gets built here rather than at phase 9. See
+  `docs/visualization.md`, and note the rule that keeps a viewer
+  from reading S3 and polluting the byte counter.
 - Vectorise masks per chip, cropped to the stride interior. Do not
   merge yet.
 
@@ -412,8 +416,12 @@ The output is a dataset someone queries, not a dump.
 ### Phase 11. Writeup (1 day)
 
 Result first. Figures above the fold, because tables alone do not
-survive a skim. A reproduce path that runs on the 24 GB subset. A
-limitations section that names the model's out-of-distribution
+survive a skim. The figure above the fold is the scar atlas: every
+scar found, over a basemap, beside the ones MTBS recorded. It is a
+static site, so it needs no server and deploys to GitHub Pages. See
+`docs/visualization.md`. A reproduce path that runs on the 24 GB
+subset. A limitations section that names the model's
+out-of-distribution
 problem before a reader finds it.
 
 ## Effort
