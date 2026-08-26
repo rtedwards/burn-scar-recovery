@@ -85,7 +85,51 @@ Every run appends one row to `results/`. Commit the file.
 `bytes_read` divided by `bytes_needed` is the read amplification.
 Both fields are necessary. One field alone hides the waste.
 
-## The byte counter
+## Byte accounting
+
+Most rows of the read-path table are **computed, not measured**, and
+that is the better instrument rather than a compromise.
+
+Which tile-dates survived the predicate. Which six assets were
+projected. Which chips the Fmask probe kept. Each is a subset, and
+its cost is the sum of the sizes of the files in it. That number is
+exact and it does not depend on the machine, which is precisely what
+the project claims: bytes saved by a pushdown holds at any link
+speed, while seconds belong to the machine that ran it.
+
+| Row | How the bytes are known | Exact |
+| --- | --- | --- |
+| Naive baseline | Asset sizes times tile-dates | Yes |
+| STAC predicate pushdown | Which tile-dates survived | Yes |
+| Band projection | Six assets of the available set | Yes |
+| Fmask probe | Which chips the probe kept | Yes |
+| COG-tile alignment | GDAL's fetch granularity | **No** |
+
+`sizes.py` builds the index. A HEAD request returns no body, so
+asking for a size costs latency and a request but no bytes, and
+building the index does not pollute the figure it produces.
+
+**Say which is which.** Every run record carries an `accounting`
+field, and the generated table has a Source column. A computed
+number presented as a measurement is the quiet drift this project
+avoids everywhere else.
+
+**Never skip an unknown size.** A missing asset size raises. Ignoring
+one would under-report, which is the direction that makes a pushdown
+look better than it is.
+
+## The byte counter, for the one row that needs it
+
+Read amplification cannot be computed. The gap between the blocks a
+window needs and the bytes GDAL actually pulls comes from its fetch
+granularity, its read-ahead and its retries. A model of that is a
+hypothesis, not a measurement, so this row is observed.
+
+Sub-file accounting needs the per-tile `TileByteCounts` from the
+TIFF header, because a COG is compressed and a block's size on the
+wire is not its size in memory. `rasterio` does not expose that tag,
+so it needs a header parse. Both that and the wire observation are
+phase 2 work, with the row they serve.
 
 **Use one byte counter for every measurement.** Two counters make
 the rows of the result table incomparable, and the table is the

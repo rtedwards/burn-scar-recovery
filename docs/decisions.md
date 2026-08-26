@@ -211,13 +211,51 @@ project's headline conclusion is a ratio of bytes to compute. This is
 the argument for phase 0.5 existing at all, and it paid for itself
 before phase 1 read anything.
 
-Candidate replacements, none chosen yet:
+**Superseded in scope by the entry below.** The question was
+"how do we observe bytes?". The better question was "which rows need
+observation?", and the answer turned out to be one of them. A local
+counting proxy remains the candidate for that row, in phase 2.
 
-| Method | Note |
-| --- | --- |
-| A local counting proxy | Counts bytes on the wire, keeps GDAL's real behaviour including multiplexing. Most accurate. Most work |
-| System network counters | Simple. Per-process network IO is not available on macOS, so it counts the whole machine and needs an otherwise idle host |
-| Analytic only | Deterministic and cheap, but it is a model and not a measurement. The project asks for observed bytes |
+---
+
+## 2026-08-26. Compute the pushdown rows. Observe only the alignment row
+
+Supersedes the search for a single replacement byte counter. The
+failure above asked "how do we observe bytes?". The better question
+was "which rows actually need observation?", and the answer is one
+of them.
+
+Four of the five read-path rows are set arithmetic. Which tile-dates
+survived the predicate, which six assets were projected, which chips
+the probe kept. The cost of a subset is the sum of the sizes of the
+files in it, and a HEAD request gives each size exactly.
+
+**Computed is the better instrument here, not a fallback.** The
+project claims that bytes saved by a pushdown holds at any link
+speed while seconds belong to one machine. A figure derived from
+file sizes has exactly that property. A figure observed on one
+domestic connection has it less.
+
+Read amplification is the exception. The gap between blocks needed
+and bytes fetched comes from GDAL's fetch granularity, and a model
+of that is a hypothesis rather than a measurement. That row is
+observed, and it is the only one that needs a wire counter.
+
+**What this changes.** The wire-observation problem shrinks from
+"the whole table" to "one row", and it moves to phase 2 alongside
+the COG alignment work it serves. Sub-file accounting needs
+`TileByteCounts` from the TIFF header, since a COG is compressed and
+a block's size on the wire is not its size in memory. `rasterio`
+does not expose that tag, so it needs a header parse. Also phase 2.
+
+**Provenance is recorded, not implied.** `RunRecord.accounting` is
+one of `analytic`, `wire` or `both`, and the generated table has a
+Source column. A computed number presented as a measurement would be
+the same drift the generated tables exist to prevent.
+
+Credit where due: this came from the question "don't we know how
+large the file is?". We do, and the first draft had reached for a
+proxy without asking it.
 
 ---
 
@@ -247,4 +285,5 @@ These need data. Do not decide them in advance.
 | The stride | 4 | The smallest halo that removes the edge artifacts |
 | The scar link overlap threshold | 5 | See `conventions.md` |
 | The exact Prithvi checkpoint | 0 | Pin it, or a gate failure is ambiguous |
-| **How to measure bytes** | 0.5 | The debug-log method failed validation. Blocks every read-path row |
+| Wire byte observation | 2 | Needed only for the alignment row. A local counting proxy is the candidate |
+| TIFF `TileByteCounts` parse | 2 | Sub-file accounting. `rasterio` does not expose the tag |
