@@ -1,0 +1,66 @@
+name: Integration
+
+# Never on push or PR. These tests need Earthdata credentials and hit live
+# NASA infrastructure in us-west-2; running them per-commit would be slow,
+# flaky, and would fail confusingly on forks that have no secrets.
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 06:00 UTC. Enough to notice if CMR-STAC or the HLS asset
+    # layout changes under the pipeline, without hammering the endpoint.
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  FORCE_COLOR: "1"
+  AWS_REGION: us-west-2
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Secrets are referenced by name only. If they are not configured (a
+      # fork, or a fresh clone), the step below reports it and the suite skips
+      # itself cleanly via tests/integration/conftest.py rather than failing.
+      - name: Check for credentials
+        id: creds
+        env:
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+        run: |
+          if [[ -n "$EARTHDATA_TOKEN" || ( -n "$EARTHDATA_USERNAME" && -n "$EARTHDATA_PASSWORD" ) ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Earthdata credentials configured; the integration suite will skip."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync
+        run: uv sync --frozen
+
+      - name: Integration tests
+        env:
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+        run: just test-integration
