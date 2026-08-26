@@ -22,7 +22,8 @@ One pass. Dense in time, full spatial extent, three tiles.
 
 | Quantity | Value |
 | --- | --- |
-| MGRS tiles | 3, southern California chaparral belt |
+| MGRS tiles | 3, southern California chaparral belt, UTM zone 11 |
+| Window | 2017-07 to 2025-06 |
 | Years | 8 |
 | HLS revisit, median | 2 to 3 days |
 | Tile-dates | ~3,600 |
@@ -43,6 +44,29 @@ interval, and fires below the MTBS size threshold. Pruning to known
 perimeters would buy speed by using the answer, which is fine for a
 recovery study and circular for a discovery claim. Cutting from six
 tiles to three buys the same speed and costs only statistical power.
+
+**Why this window.** Sentinel-2B reached operations in July 2017,
+which is the first date the 2 to 3 day revisit claim is actually
+true. Starting there also opens the window weeks before the Thomas
+Fire, roughly 114,000 ha of Ventura and Santa Barbara chaparral,
+which gives one large well-mapped scar followed for seven and a
+half years. Closing in mid-2025 catches the January 2025 Palisades
+and Eaton fires while their scars are still fresh.
+
+That last point matters more than it looks. Fresh scars are what
+the model was fine-tuned on, so they are the in-distribution end of
+the corpus. Old scars carry the recovery curve; fresh scars are the
+standing check that a disappointing curve is the ground recovering
+and not the model degrading.
+
+**The three tiles are resolved in phase 1, not guessed here.** The
+belt runs Ventura and Santa Barbara, then the Santa Monica and San
+Gabriel front, then the San Diego backcountry. Take the exact MGRS
+IDs from the STAC search. Selection criteria, in order: chaparral
+fraction per WorldCover, count of MTBS fires igniting in the first
+two years of the window, low ocean and urban fraction, and tiles
+that share edges so the phase 5 union is exercised across tiles and
+not only within one.
 
 **Spatial pushdown is measured, not applied.** Report what pruning
 to MTBS perimeters would have saved on the read path. Then
@@ -141,12 +165,70 @@ Three gates. Fail any and the plan changes, not the model.
   one windowed read over `/vsicurl/`. Confirm egress terms.
 - **Model.** Run the Prithvi burn scar head zero-shot on ~20 chips
   over known MTBS fires. Score against rasterised MTBS.
+  - **Pass mark: median per-chip IoU at or above 0.50.** Median, not
+    mean, so one perimeter with a large unburned interior cannot
+    sink the gate on its own.
+  - **Fresh scars only, under a year post-ignition.** A recovered
+    scar scoring badly is ambiguous. It could mean the model is
+    broken or it could mean the scar recovered, which is the thing
+    being measured. Fresh chips separate those.
   - Passes: stop, move on.
   - Fails: vary chip size and normalisation, then the area of
     interest. Do not train.
+
+**Why 0.50 and not higher.** MTBS perimeters are operational fire
+boundaries. They enclose unburned islands and are not per-pixel
+burn maps, so a correct model has a ceiling against them somewhere
+around 0.6 to 0.7. A bar of 0.50 is roughly three quarters of what
+is achievable. Set it higher and a working model fails.
+
+**Why the number is written down first.** Twenty chips will look
+roughly right. Roughly right always passes when the bar is set
+afterwards, and the failure branch here is expensive, so there is
+real pressure to call it a pass. Decide before looking.
+
+**What this gate does not test.** Behaviour on partly recovered
+scars. That is known to be out of distribution, it is unfixable
+without training, and it is exactly why the dNBR control ring
+exists as a second independent measurement. Do not extend the gate
+to cover it.
 - Confirm the model's input size (verify; likely 224). Pick the
   stride. Stride is the halo knob, see phase 4.
 - Pull MTBS perimeters, Copernicus DEM, ESA WorldCover.
+
+### Phase 0.5. The instrument (½ day)
+
+Every later phase writes into this. Nine table rows, a dozen
+measurements per phase, two machines and several sweeps. Build the
+recording layer once, before phase 1 produces the first number.
+
+- **The byte counter.** Bytes are the primary metric and nothing
+  reports them yet. `rasterio` does not expose bytes over the wire.
+  Capture GDAL's VSICURL range-request log through a Python error
+  handler under `CPL_DEBUG=ON` and sum the ranges. Validate it once
+  against process-level network counters on a known read, then
+  trust it. Also keep the analytic count, windows times block size,
+  as a cross-check that catches silently dropped reads.
+- **One instrument, every row.** The same counter has to produce
+  every figure in the read-path table or the rows are not
+  comparable and the table means nothing.
+- **The run record.** One row per run: config hash, git SHA,
+  machine, extent, bytes read, bytes needed, wall time, chips per
+  second, GPU utilisation. Append to `results/`. Commit it.
+- **Tables are generated, not typed.** A `just report` recipe
+  rebuilds the README tables from `results/`. Hand-edited markdown
+  across four weekends is how numbers stop matching the code that
+  produced them.
+- **Frozen config, hashed.** One immutable config object per run.
+  Its hash is the run ID. A sweep is a list of configs, not a set
+  of edited constants.
+- **Deterministic chip IDs.** `(tile, date, row, col)`, derived not
+  assigned. Phase 9 joins on them across dates and phase 10 needs
+  them stable so a restart can skip finished work.
+- **CRS conventions, fixed now.** Read in the tile's native UTM.
+  Write GeoParquet in EPSG:4326. **Compute every area figure in
+  EPSG:5070, CONUS Albers.** Area against time is the headline
+  result and per-tile UTM areas are not comparable across the belt.
 
 ### Phase 1. Predicate pushdown (½ day)
 
@@ -168,6 +250,12 @@ Three gates. Fail any and the plan changes, not the model.
   pushdown. Go one level further. Read Fmask first, one band, decide
   per chip, then fetch the six model bands only for clear chips.
   Cheap column first, expensive column second.
+- **Define "clear" explicitly, and write it down.** Which Fmask bits
+  disqualify a pixel, and what fraction of clear pixels a chip needs
+  to survive. Cloud shadow deserves its own decision: shadow over
+  chaparral is dark and reads like a burn scar, so treating it as
+  clear manufactures false positives that phase 9 then measures as
+  recovery. Record the chip drop rate for each choice.
 - Set and measure the GDAL variables one at a time:
   `GDAL_DISABLE_READDIR_ON_OPEN`, `GDAL_HTTP_MULTIPLEX`, `VSI_CACHE`,
   `CPL_VSIL_CURL_ALLOWED_EXTENSIONS`.
@@ -178,6 +266,9 @@ Three gates. Fail any and the plan changes, not the model.
   NVMe, roughly 10 GB. Not the corpus.
 
 ### Phase 3. Ray Data, one node, CPU only (2 days)
+
+Chipping comes from phase 4, so build the chip planner first or
+stub it. The ordering here is by risk, not by dependency.
 
 - `ray.init()` on the M1 Max. Real actors, real backpressure, no
   cluster yet.
@@ -225,6 +316,11 @@ compact shape of equal area.
   merge. Build a touch graph, run connected components, dissolve
   each component.
 - Assign a stable scar ID so one scar is trackable across dates.
+  This is a second connected-components problem, over time rather
+  than space: a scar at `t` links to a scar at `t+1` when they
+  overlap above a threshold. Pick and record that threshold. The
+  reburn split in phase 9 is a deliberate cut in this same graph,
+  so design the two together even though they are built apart.
 - **Measure:** candidate fraction, component size distribution,
   union wall time against total polygon count.
 - **Prove it:** take the largest fire in the area of interest and
@@ -232,6 +328,9 @@ compact shape of equal area.
 
 ### Phase 6. Two nodes (1 day)
 
+- **Pin the versions before starting.** Mixed arm64 and x86_64 is
+  fine, mismatched Python or Ray versions across the two nodes is
+  not. Lock both in phase 0.5 rather than discovering it here.
 - Start a head node on the 5900X box. Join the M1 Max as a worker.
 - Schedule the CPU preprocessing pool on the M1 Max and the GPU
   actors on the 5900X box. Use resource labels, not luck.
@@ -352,3 +451,7 @@ that is fine, as long as the MTBS agreement number is honest.
 | Egress charges appear | Verify Earthdata terms in phase 0. The cache limits repeat reads |
 | Re-reading 377 GB for every benchmark row | Sweep against the 24 GB subset. One production run at the end |
 | Slow link makes wall-clock unrepresentative | Report bytes as the primary metric |
+| Areas computed in per-tile UTM are not comparable across the belt | Every area figure in EPSG:5070. Fixed in phase 0.5 |
+| Cloud shadow reads as burn scar and inflates recovery | Shadow disqualifies a pixel. Record the drop rate for each Fmask choice |
+| The byte counter itself is wrong, so every row is wrong | Validate against process-level network counters once, and keep the analytic count as a cross-check |
+| Mismatched Python or Ray versions across the two nodes | Pin both in phase 0.5, not at phase 6 |
