@@ -83,6 +83,14 @@ update:
 gate:
     @uv run python -c "import sys, torch; print(f'python  {sys.version.split()[0]}'); print(f'torch   {torch.__version__}'); print(f'cuda    {torch.version.cuda}'); print(f'device  {torch.cuda.get_device_name(0) if torch.cuda.is_available() else (\"mps\" if torch.backends.mps.is_available() else \"cpu\")}'); print(f'sm      {torch.cuda.get_device_capability(0) if torch.cuda.is_available() else \"n/a\"}')"
 
+# Regenerate the README result tables from results/runs.jsonl.
+#
+# The tables are generated, never typed: a hand-edited number stops matching
+# the code that produced it and no reader can tell. With no runs recorded this
+# is a no-op, so it does not wipe the stub tables before there is a result.
+report:
+    uv run python -m burn_scar_recovery.report
+
 # Remove caches and build artifacts. Leaves data/, cache/ and results/ alone.
 clean:
     rm -rf .ruff_cache .mypy_cache .pytest_cache htmlcov .coverage coverage.xml dist build
