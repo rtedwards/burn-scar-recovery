@@ -75,22 +75,31 @@ def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    """Skip the whole integration tree when it cannot possibly work."""
+    """Skip the integration tree when it cannot possibly work.
+
+    Not every integration test needs Earthdata. The byte counter is validated
+    against a public COG that needs no login, and skipping it for want of
+    credentials it never uses would leave the project's primary instrument
+    unvalidated on any machine without a NASA account. Tests marked
+    ``no_credentials`` therefore need the network but not a login.
+    """
     ours = [item for item in items if _HERE in Path(item.path).parents]
     if not ours:
         return
 
-    if not _has_credentials():
-        reason = (
-            "no Earthdata credentials: set EARTHDATA_TOKEN, or "
-            "EARTHDATA_USERNAME + EARTHDATA_PASSWORD, or add a ~/.netrc entry "
-            f"for {_NETRC_HOST}. See .env.example."
-        )
-    elif not _has_network():
-        reason = f"cannot reach {_PROBE_HOST}:443 -- offline?"
-    else:
-        return
+    offline = not _has_network()
+    unauthenticated = not _has_credentials()
 
-    skip = pytest.mark.skip(reason=reason)
+    network_reason = f"cannot reach {_PROBE_HOST}:443 -- offline?"
+    credential_reason = (
+        "no Earthdata credentials: set EARTHDATA_TOKEN, or "
+        "EARTHDATA_USERNAME + EARTHDATA_PASSWORD, or add a ~/.netrc entry "
+        f"for {_NETRC_HOST}. See .env.example."
+    )
+
     for item in ours:
-        item.add_marker(skip)
+        needs_login = item.get_closest_marker("no_credentials") is None
+        if offline:
+            item.add_marker(pytest.mark.skip(reason=network_reason))
+        elif needs_login and unauthenticated:
+            item.add_marker(pytest.mark.skip(reason=credential_reason))
