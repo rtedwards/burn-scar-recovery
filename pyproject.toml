@@ -1,0 +1,235 @@
+[project]
+name = "burn-scar-recovery"
+version = "0.1.0"
+description = "Segmentation inference over eight years of HLS imagery, measured as a sequence of pushdowns."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14,<3.15"
+authors = [{ name = "Robert Edwards" }]
+
+# Every dependency here is named by README.md or ROADMAP.md, or is directly
+# implied by a phase in it. Nothing speculative.
+dependencies = [
+    # Phase 1: CMR-STAC search -> GeoParquet manifest.
+    "pystac-client>=0.9",
+    # Phase 2: windowed COG reads over /vsicurl/, and rasterio.features for
+    # phase 4 vectorisation.
+    "rasterio>=1.5",
+    # Phases 4-5: chip masks, the touch graph, the dissolve.
+    "shapely>=2.1",
+    # Phases 5, 8-9: spatial joins, hilbert_distance, GeoParquet 1.1 write.
+    "geopandas>=1.1",
+    # Phase 8: row group tuning, bbox covering column.
+    "pyarrow>=21",
+    # Phase 5: connected components over the chip-edge touch graph.
+    "scipy>=1.16",
+    # Phases 3, 6: CPU/GPU actor pools, backpressure, two-node cluster.
+    "ray[data]>=2.58",
+    # Phases 0, 7: Prithvi burn scar head. See [tool.uv.sources] below for the
+    # per-platform wheel routing.
+    "torch>=2.13",
+    # Phase 0: pull the Prithvi burn scar checkpoint.
+    "huggingface-hub>=0.36",
+    "numpy>=2.5",
+    # Config objects and Earthdata credentials out of the environment.
+    "pydantic>=2.13",
+    "pydantic-settings>=2.7",
+    # Phase 8: the query-side benchmark, chip order against Hilbert order.
+    "sedonadb>=0.4",
+]
+
+[project.urls]
+Repository = "https://github.com/robertedwards/burn-scar-recovery"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/burn_scar_recovery"]
+
+# ---------------------------------------------------------------------------
+# uv
+# ---------------------------------------------------------------------------
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14",
+    "mypy>=1.18",
+    "pytest>=8.4",
+    "pytest-cov>=7.0",
+    "pre-commit>=4.3",
+    "types-shapely>=2.1",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+# Lock for both cluster nodes, not just whichever one ran `uv lock`.
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+# torch has to come from a different place on each of the two machines in the
+# cluster, and `uv sync` must do the right thing on both without a flag.
+#
+#   macOS arm64 (M1 Max, the CPU preprocessing node)
+#       PyPI. That wheel carries the CPU + MPS build. There is no CUDA build
+#       for Darwin and asking for one is an error.
+#
+#   linux x86_64 (5900X + RTX 5070, the GPU node)
+#       download.pytorch.org/whl/cu129. The 5070 is Blackwell, compute
+#       capability sm_120, and a wheel built against CUDA < 12.8 carries no
+#       kernels for it -- it fails at the first launch with a confusing
+#       "no kernel image is available" rather than at import. cu126 is
+#       therefore not an option even though it exists for cp314.
+#
+# Index choice, checked against the cp314 / linux x86_64 files actually
+# published for torch 2.13.0:
+#       cu126  present, but CUDA 12.6 < 12.8. Excluded, no sm_120.
+#       cu128  stops at torch 2.11.0 for cp314. Not available at 2.13.
+#       cu129  present. CUDA 12.9, sm_120, stays in the 12.x driver family.
+#       cu130  present. CUDA 13.0, also fine, but wants a 580+ driver.
+# cu129 is the conservative pick. If the GPU box is on a 580+ driver, swapping
+# the index url below to .../cu130 is the only change needed.
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu129", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+]
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    # Conflicts with the formatter. Ruff itself tells you to turn these off.
+    "COM812",
+    "ISC001",
+    # Docstrings: D203/D213 are the incompatible halves of the pairs the
+    # google convention already resolves; listing them keeps ruff quiet.
+    "D203",
+    "D213",
+    # Exception messages. Hoisting every message to a named variable to satisfy
+    # EM/TRY003 makes error paths harder to read, not easier.
+    "EM101",
+    "EM102",
+    "TRY003",
+    # TODOs. This is a phased research project and the roadmap is the issue
+    # tracker; requiring an author and a link on every TODO buys nothing.
+    "FIX002",
+    "TD002",
+    "TD003",
+    # `Any` in a signature. Unavoidable at the rasterio/ray/torch boundary,
+    # where the libraries are untyped anyway.
+    "ANN401",
+    # Per-file copyright headers. Solo MIT repo; the licence is in one place.
+    "CPY001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",     # assert is the point
+    "S105",     # fake tokens in fixtures
+    "S106",     # fake passwords in fixtures
+    "PLR2004",  # magic numbers are the fixtures
+    "D103",     # test names carry the description
+    "ANN201",   # -> None on every test adds nothing
+    "INP001",   # tests/ is deliberately not a package
+    "ARG001",   # pytest fixtures arrive as unused-looking args
+    "PLC0415",  # imports deferred behind pytest.importorskip, on purpose
+]
+"benchmarks/**/*.py" = ["T201", "S101"]  # printing a table is the output
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.14"
+files = ["src", "tests"]
+# tests/ has three conftest.py files (root, unit, integration). Without
+# explicit package bases mypy sees three modules called "conftest" and stops.
+# With them, `src` is a base (so the package is `burn_scar_recovery`, not
+# `src.burn_scar_recovery`) and the repo root is a base for `tests.*`.
+mypy_path = "src"
+explicit_package_bases = true
+namespace_packages = true
+strict = true
+warn_unreachable = true
+extra_checks = true
+pretty = true
+
+# The geospatial and ML stack is almost entirely unstubbed. These are the
+# libraries where `import` itself would otherwise be an error under strict.
+[[tool.mypy.overrides]]
+module = [
+    "geopandas.*",
+    "osgeo.*",
+    "pyproj.*",
+    "pystac.*",
+    "pystac_client.*",
+    "rasterio.*",
+    "ray.*",
+    "scipy.*",
+    "sedonadb.*",
+]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+# The tree is split by path, not only by marker. `just test` points pytest at
+# tests/unit alone, so a unit run never imports the network-dependent modules
+# just to deselect them -- collection stays fast enough for a commit hook.
+testpaths = ["tests/unit", "tests/integration"]
+# Deliberately lean: no --cov here. Coverage instrumentation roughly doubles
+# the run and buys nothing at commit time, and a unit-only coverage number is
+# misleading for code the integration tree exercises. See `just cov`.
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
+]
+xfail_strict = true
+filterwarnings = ["error"]
+# Finer control within each tree. All three are opt-in: tests/conftest.py
+# deselects them unless the matching flag is passed. See `just test-all`.
+markers = [
+    "slow: takes more than a few seconds (sweeps, full-tile reads)",
+    "network: hits S3, CMR-STAC or Earthdata Login",
+    "gpu: needs a CUDA device (the RTX 5070 node)",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
