@@ -296,6 +296,10 @@ costs read amplification.
 | 160 | 32 | 1.96x |
 
 - **Measure:** the smallest halo that kills the edge artifacts.
+- **This one needs eyes.** No number tells you the seam is gone, so
+  a minimal chip grid gets built here rather than at phase 9. See
+  `docs/visualization.md` for the plan, and for the rule that keeps
+  a viewer from reading S3 and polluting the byte counter.
 - Vectorise masks per chip, cropped to the stride interior. Do not
   merge yet.
 
