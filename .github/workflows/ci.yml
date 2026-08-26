@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+
+jobs:
+  check:
+    # CPU only. The GPU node is a workstation under a desk, not a runner.
+    # `just check` is lint + typecheck + unit tests: hermetic, no network, no
+    # GPU. The live S3 tests are the separate `integration` workflow.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # The pre-commit hooks and CI both shell out to just, so that a hook, a
+      # CI run and a local run are provably the same commands.
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Install Python
+        run: uv python install
+
+      # --frozen: CI verifies the committed lockfile, it does not re-resolve.
+      # A dependency change has to arrive as a uv.lock diff in the PR.
+      - name: Sync
+        run: uv sync --frozen
+
+      - name: Report the environment
+        run: just gate
+
+      - name: Check
+        run: just check

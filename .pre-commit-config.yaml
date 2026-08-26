@@ -1,0 +1,128 @@
+# The justfile is the single source of truth for the Python quality gates.
+# These hooks shell out to `just` so that a commit, a push, CI and a local
+# `just check` are provably the same commands with the same tool versions --
+# the ones pinned in uv.lock's dev group.
+#
+# Deliberately NOT using astral-sh/ruff-pre-commit or mirrors-mypy: those pin
+# their own tool versions in this file, which then drift from uv.lock.
+#
+# Requires `just` and `uv` on PATH. See the header of the justfile.
+
+# Two stages: pre-commit for the quality gates, commit-msg for Conventional
+# Commits. Both run in well under a second on a normal staged set, so there is
+# nothing left worth deferring to pre-push.
+#
+# BOTH must be listed. `pre-commit install` alone only writes
+# .git/hooks/pre-commit, and an uninstalled commit-msg hook is silently inert:
+# the config parses, the hook never runs, bad messages sail through. `just
+# setup` also passes both --hook-type flags explicitly, belt and braces.
+default_install_hook_types: [pre-commit, commit-msg]
+
+# A hook that does not declare `stages` runs in EVERY installed stage. Adding
+# the commit-msg type therefore made ruff, mypy and pytest run twice per commit
+# until this line existed -- once at pre-commit, then again at commit-msg.
+# Measured, not guessed: the duplicate run is visible in the hook output.
+#
+# The Conventional Commits hook below opts back into commit-msg explicitly.
+default_stages: [pre-commit]
+
+# check-ast parses the tree with this interpreter. The project targets 3.14
+# and ruff formats to match (PEP 758 `except A, B:`), so an older hook
+# interpreter would report a SyntaxError on valid project code.
+default_language_version:
+  python: python3.14
+
+repos:
+  # Hygiene. These have no equivalent in the justfile and no version to drift,
+  # so they come from upstream as normal.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$  # two trailing spaces is a line break in markdown
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: detect-private-key
+      # This project reads multi-GB rasters and writes GeoParquet. Nothing of
+      # that shape belongs in git history -- once it is in a pack, it is in the
+      # pack forever. 512 KB is deliberately tight: the only large thing that
+      # could legitimately want committing is a figure for the writeup, and
+      # that should be optimised anyway.
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-ast
+      - id: debug-statements
+
+  # Notebooks are plausible for the phase 9 analysis and the phase 11 figures.
+  # Strip outputs so a plotted raster does not become a 40 MB diff.
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+
+  # Conventional Commits, enforced rather than documented and hoped for.
+  #
+  # This one is from upstream despite the justfile rule above, and the
+  # distinction matters: the rule exists so that ruff/mypy/pytest versions
+  # cannot drift from uv.lock. A commit message check runs no project tool and
+  # has no version to drift, so there is nothing for a justfile recipe to own.
+  #
+  # Note `pre-commit run --all-files` does NOT exercise this hook -- commit-msg
+  # hooks only fire on a real commit. Test it by attempting a bad message.
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, docs, chore, refactor, test, perf, build, ci, revert]
+
+  # The Python gates, routed through just.
+  - repo: local
+    hooks:
+      # pass_filenames: true. Ruff is per-file by nature and the staged set is
+      # normally a handful of files, so this is much faster than the whole
+      # tree. `just lint-fix` with no arguments still lints everything, which
+      # keeps the recipe usable standalone.
+      - id: just-lint-fix
+        name: ruff (via just lint-fix)
+        entry: just lint-fix
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: true
+        require_serial: true
+
+      # pass_filenames: false. mypy needs the whole package to resolve
+      # cross-module types; handing it only the staged files produces wrong
+      # answers (missing errors, and spurious ones from unresolved imports).
+      # The `files:` pattern still means it only runs when Python changes.
+      - id: just-typecheck
+        name: mypy (via just typecheck)
+        entry: just typecheck
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        require_serial: true
+
+      # LAST, so the cheap failures (lint, then types) surface first.
+      #
+      # pass_filenames: false. The recipe already targets tests/unit, and
+      # pytest treats paths as selectors rather than as a filter -- passing
+      # the staged files would silently run a subset, or nothing at all when
+      # only src/ changed.
+      #
+      # Unit only: hermetic, no network, no GPU, no coverage, -x. Runs in well
+      # under a second. A hook that takes longer gets routinely bypassed with
+      # --no-verify, which is worse than not having it. The live S3 tests are
+      # `just test-integration`, run by hand.
+      - id: just-test
+        name: pytest unit (via just test)
+        entry: just test
+        language: system
+        types_or: [python, pyi, toml]
+        pass_filenames: false
+        require_serial: true
