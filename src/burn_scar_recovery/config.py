@@ -46,21 +46,14 @@ class Settings(BaseSettings):
     cache_dir: Path = Field(default=REPO_ROOT / "cache")
     results_dir: Path = Field(default=REPO_ROOT / "results")
 
-    # -- Chip plan ------------------------------------------------------------
-    # The model input is fixed, so the halo comes out of the stride and every
-    # pixel of it costs read amplification. 224/192 is 1.36x.
-    chip_size: int = 224
-    chip_stride: int = 192
-
-    @property
-    def halo(self) -> int:
-        """Pixels of overlap on each side of a chip."""
-        return (self.chip_size - self.chip_stride) // 2
-
-    @property
-    def read_amplification(self) -> float:
-        """Bytes read per byte of unique ground area, from the stride alone."""
-        return (self.chip_size / self.chip_stride) ** 2
+    # NOTE: the chip plan is deliberately NOT here. chip_size and chip_stride
+    # live on RunConfig in burn_scar_recovery.runs, because phase 4 sweeps the
+    # stride and a swept knob must be inside the hashed configuration. If it
+    # sat here, every run of the sweep would hash identically and the results
+    # table would compare unlike things while claiming they were the same.
+    #
+    # The rule: Settings holds what a machine provides. RunConfig holds what an
+    # experiment decides.
 
 
 @lru_cache(maxsize=1)

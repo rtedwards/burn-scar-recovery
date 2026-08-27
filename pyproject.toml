@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/robertedwards/burn-scar-recovery"
+Repository = "https://github.com/rtedwards/burn-scar-recovery"
 
 [build-system]
 requires = ["hatchling"]
@@ -224,6 +224,10 @@ markers = [
     "slow: takes more than a few seconds (sweeps, full-tile reads)",
     "network: hits S3, CMR-STAC or Earthdata Login",
     "gpu: needs a CUDA device (the RTX 5070 node)",
+    # Reads public data over the network but needs no Earthdata login. The
+    # byte counter is validated this way, so the project's primary instrument
+    # can be checked on a machine with no NASA account.
+    "no_credentials: an integration test that needs the network but no login",
 ]
 
 [tool.coverage.run]

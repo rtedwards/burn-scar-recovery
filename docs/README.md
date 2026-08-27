@@ -6,6 +6,7 @@ that both of those documents assume.
 
 | File | Content | Read it when |
 | --- | --- | --- |
+| [architecture.md](architecture.md) | Layers, stages, and where Ray lives | You add a module or a pipeline step |
 | [glossary.md](glossary.md) | The approved term for each concept | You name a function, a column or a file |
 | [conventions.md](conventions.md) | Identifiers, coordinate systems, run records | You write data to disk |
 | [data-sources.md](data-sources.md) | The datasets, the bands, the access rules | You read a new dataset |

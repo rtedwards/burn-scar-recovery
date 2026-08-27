@@ -110,6 +110,7 @@ Bytes are the primary metric. Bytes saved by a pushdown is a
 property of the pipeline and holds at any link speed. Wall-clock is
 a property of the machine it ran on.
 
+<!-- BEGIN GENERATED: read-path -->
 | Configuration | Bytes read | Wall time | GPU util | $/M chips |
 | --- | --- | --- | --- | --- |
 | Naive: all tile-dates, all bands, fp32, no stride overlap | | | | |
@@ -121,6 +122,7 @@ a property of the machine it ran on.
 | + second node | | | | |
 | + fp16, channels_last, compile | | | | |
 | (measured, not applied) spatial pushdown to known perimeters | | | | |
+<!-- END GENERATED: read-path -->
 
 ### Bottleneck crossover
 

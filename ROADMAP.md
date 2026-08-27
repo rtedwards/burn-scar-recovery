@@ -256,6 +256,9 @@ recording layer once, before phase 1 produces the first number.
   chaparral is dark and reads like a burn scar, so treating it as
   clear manufactures false positives that phase 9 then measures as
   recovery. Record the chip drop rate for each choice.
+- **`CPL_VSIL_CURL_USE_HEAD=NO` is a precondition, not a knob.**
+  Without it LP DAAC returns 404 to VSICURL's probe and GDAL calls
+  it a corrupt file. Nothing is measurable until it is set.
 - Set and measure the GDAL variables one at a time:
   `GDAL_DISABLE_READDIR_ON_OPEN`, `GDAL_HTTP_MULTIPLEX`, `VSI_CACHE`,
   `CPL_VSIL_CURL_ALLOWED_EXTENSIONS`.
