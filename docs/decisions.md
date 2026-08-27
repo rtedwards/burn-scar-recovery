@@ -291,6 +291,30 @@ It never left `stability="alpha"` in its lifetime. Documentation
 pages for it still exist and are stale, so check the installed
 package rather than the docs.
 
+**Why it went, from the Ray team.** It was dropped rather than
+superseded: "We do not plan to replace this functionality. The Ray
+team is already at more than full capacity maintaining Ray and the
+other GA libraries." It shipped in Ray 1.7 in October 2021 and was
+still alpha when it was removed, so adoption never justified the
+maintenance cost beside Core, Data, Train, Tune and Serve.
+
+The team names Airflow and Temporal as the closest analogs, and says
+plainly that the Anyscale platform does not replace it either.
+
+**The distinction that matters here.** Ray Core still has fault
+tolerance through lineage reconstruction: a dead worker's task is
+re-executed and the job continues. What Ray never had, and now will
+not have, is durability across a *driver* crash. Killing the whole
+job and resuming it tomorrow is phase 10's requirement, and no Ray
+feature covers it.
+
+So the completion manifest is not a workaround for a missing
+library. Ray has drawn its boundary at "execution engine" and
+pushed durable execution out to orchestrators. For a 4.2 hour run,
+a file listing finished partitions is the proportionate tool.
+Temporal is built for long-running business workflows, and Airflow
+would be a scheduler with nothing to schedule.
+
 **Nothing changes.** Phase 10 already specifies idempotent tasks,
 per-partition output and a completion manifest, which gives the same
 resume property with no dependency, and a text file is inspectable
