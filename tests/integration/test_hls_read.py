@@ -53,6 +53,13 @@ def _gdal_env(
     """
     cookies = tmp_path_factory.mktemp("gdal") / "cookies.txt"
     options: dict[str, object] = {
+        # THE one that makes LP DAAC work. VSICURL probes a file with a HEAD
+        # request before reading it. LP DAAC answers the GET with a redirect to
+        # a presigned S3 URL, but does not serve the HEAD, so GDAL gets a 404
+        # and reports it as "not recognized as being in a supported file
+        # format" -- which reads like a corrupt file rather than a protocol
+        # mismatch. curl fetches the same URL with the same token and gets 200.
+        "CPL_VSIL_CURL_USE_HEAD": "NO",
         "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
         "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".tif,.TIF,.tiff",
         "GDAL_HTTP_MULTIPLEX": True,
@@ -112,16 +119,22 @@ def test_windowed_vsicurl_read_returns_one_chip(hls_item: Any) -> None:
     try:
         src_cm = rasterio.open(url)
     except rasterio.errors.RasterioIOError as exc:
-        # The overwhelmingly likely cause is auth, not a corrupt COG: LP DAAC
-        # hands back an HTML login page, which GDAL cannot identify.
+        # GDAL says "not recognized as being in a supported file format" for
+        # every failure here, which reads like a corrupt COG and is almost
+        # never that. In likelihood order:
         pytest.fail(
             f"could not open {url}: {exc}\n\n"
-            "This is almost always Earthdata authorisation rather than a bad "
-            "file. Check that:\n"
-            "  1. the token/password is current (tokens expire), and\n"
-            "  2. the account has authorised the 'LP DAAC Data Pool' "
-            "application at https://urs.earthdata.nasa.gov/profile.\n"
-            "See .env.example.",
+            "GDAL reports a format error for anything it cannot fetch. "
+            "Check, in this order:\n"
+            "  1. CPL_VSIL_CURL_USE_HEAD is 'NO'. VSICURL probes with a HEAD "
+            "request, LP DAAC does not serve one, and the 404 surfaces as a "
+            "format error. This is the usual cause.\n"
+            "  2. The token is current. They expire after about 60 days.\n"
+            "  3. The account has authorised the LP DAAC applications at "
+            "https://urs.earthdata.nasa.gov/profile.\n\n"
+            "To tell 1 from 2 and 3: fetch the same URL with curl, sending "
+            "'Authorization: Bearer <token>' and following redirects. A 200 "
+            "there means the credentials are fine and the problem is GDAL's.",
         )
 
     with src_cm as src:

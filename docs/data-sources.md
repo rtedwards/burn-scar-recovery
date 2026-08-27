@@ -63,6 +63,11 @@ Fmask is 1 band of 6, so the probe read costs approximately 17% of
 the bytes. Raw Sentinel-2 has 15 bands, where the same probe would
 cost approximately 7%.
 
+**Reading it needs `CPL_VSIL_CURL_USE_HEAD=NO`.** VSICURL probes
+with a HEAD request, LP DAAC does not serve one, and the 404 arrives
+as "not recognized as being in a supported file format". See
+`decisions.md`.
+
 **Confirm the egress terms in phase 0.** NASA does not usually
 charge for egress. Verify it before you read 377 GB.
 

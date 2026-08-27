@@ -337,6 +337,34 @@ the pinned version first.
 
 ---
 
+## 2026-08-27. LP DAAC needs CPL_VSIL_CURL_USE_HEAD=NO
+
+The single setting that makes HLS readable over `/vsicurl/`.
+
+VSICURL probes a file with an HTTP HEAD request before it reads.
+LP DAAC answers a GET with a redirect to a presigned S3 URL, but
+does not serve the HEAD, so GDAL receives a 404. It then reports:
+
+```
+not recognized as being in a supported file format
+```
+
+**That message is why this cost time.** It reads as a corrupt file,
+so the search goes to the data. The cause is a protocol mismatch,
+and the credentials are irrelevant.
+
+**How to tell them apart.** Fetch the same URL with curl, sending
+`Authorization: Bearer <token>` and following redirects. A 200 there
+proves the token and the application authorisation are both fine and
+the problem belongs to GDAL. In this case curl returned 200 while
+GDAL returned a format error, which located the fault immediately.
+
+Phase 2 measures the GDAL variables one at a time.
+`CPL_VSIL_CURL_USE_HEAD` is not one of them. It is a precondition:
+without it there is nothing to measure.
+
+---
+
 ## Open decisions
 
 These need data. Do not decide them in advance.
