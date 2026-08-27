@@ -15,6 +15,7 @@ from burn_scar_recovery.runs import (
     RunConfig,
     RunRecord,
     append_run,
+    git_revision,
     load_runs,
 )
 
@@ -212,3 +213,18 @@ def test_blank_lines_are_tolerated(tmp_path: Path) -> None:
     path = tmp_path / RUNS_FILENAME
     path.write_text(path.read_text(encoding="utf-8") + "\n\n", encoding="utf-8")
     assert len(load_runs(tmp_path)) == 1
+
+
+# -- Provenance --------------------------------------------------------------
+
+
+def test_git_revision_is_unknown_outside_a_checkout(tmp_path: Path) -> None:
+    """A record from a non-checkout must say so rather than raise mid-run."""
+    assert git_revision(tmp_path) == "unknown"
+
+
+def test_git_revision_reports_this_checkout() -> None:
+    revision = git_revision()
+    assert revision != "unknown"
+    # Either a short sha, or a short sha with the dirty marker appended.
+    assert revision.replace("-dirty", "").isalnum()

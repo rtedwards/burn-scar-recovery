@@ -6,7 +6,7 @@ No network here. ``content_length`` is exercised against a live public asset in
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 import pytest
 
@@ -14,6 +14,7 @@ from burn_scar_recovery.sizes import (
     SIZES_FILENAME,
     AssetSizeError,
     AssetSizeIndex,
+    content_length,
     saving,
 )
 
@@ -109,3 +110,76 @@ def test_to_dict_is_a_copy(index: AssetSizeIndex) -> None:
     snapshot = index.to_dict()
     snapshot[_A] = 999
     assert index.get(_A) == 100
+
+
+# -- The request itself ------------------------------------------------------
+
+
+class _FakeResponse:
+    """Minimal stand-in for an HTTP response."""
+
+    def __init__(self, headers: dict[str, str]) -> None:
+        self.headers = headers
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+
+def test_headers_are_sent_on_the_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Earthdata bearer token path.
+
+    LP DAAC assets sit behind lp-prod-protected, so every real HEAD in this
+    project carries an Authorization header. Untested, this would fail only
+    once credentials existed, which is the worst time to find out.
+    """
+    captured: dict[str, str] = {}
+
+    def fake_urlopen(request: object, timeout: float = 0.0) -> _FakeResponse:
+        captured.update(request.headers)  # type: ignore[attr-defined]
+        return _FakeResponse({"Content-Length": "123"})
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    assert content_length(_A, headers={"Authorization": "Bearer secret"}) == 123
+    # urllib title-cases header names.
+    assert captured == {"Authorization": "Bearer secret"}
+
+
+def test_a_network_failure_raises_asset_size_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_: object, **__: object) -> None:
+        raise OSError("connection reset")
+
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+    with pytest.raises(AssetSizeError, match="HEAD failed"):
+        content_length(_A)
+
+
+def test_a_missing_content_length_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A size we cannot read must not silently become zero."""
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_, **__: _FakeResponse({}),
+    )
+    with pytest.raises(AssetSizeError, match="no Content-Length"):
+        content_length(_A)
+
+
+def test_fetch_tolerates_one_bad_asset_but_leaves_it_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed HEAD must not become a zero. total() then refuses to guess."""
+
+    def selective(request: object, timeout: float = 0.0) -> _FakeResponse:
+        if request.full_url == _B:  # type: ignore[attr-defined]
+            raise OSError("gone")
+        return _FakeResponse({"Content-Length": "10"})
+
+    monkeypatch.setattr("urllib.request.urlopen", selective)
+    index = AssetSizeIndex()
+    index.fetch([_A, _B], max_workers=2)
+    assert index.get(_A) == 10
+    assert index.get(_B) is None
+    with pytest.raises(AssetSizeError, match="no known size"):
+        index.total([_A, _B])

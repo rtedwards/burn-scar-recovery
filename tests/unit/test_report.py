@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from burn_scar_recovery.report import (
+    main,
     render_read_path_table,
     splice,
     update_readme,
@@ -138,3 +139,37 @@ def test_rerunning_with_the_same_data_reports_no_change(tmp_path: Path) -> None:
     records = [_record(bytes_required=1_000_000_000)]
     assert update_readme(readme, records) is True
     assert update_readme(readme, records) is False
+
+
+# -- Duration formatting -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [
+        (45.0, "45 s"),
+        (300.0, "5.0 min"),
+        (15_120.0, "4.20 h"),
+    ],
+)
+def test_durations_are_formatted_by_magnitude(seconds: float, expected: str) -> None:
+    """A benchmark row is seconds; a production run is hours. One column, both."""
+    row = render_read_path_table([_record(wall_seconds=seconds)]).splitlines()[-1]
+    assert expected in row
+
+
+# -- The just report entry point ---------------------------------------------
+
+
+def test_main_is_a_noop_with_no_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """`just report` must not touch the README before there is a result.
+
+    The stub tables describe the intended shape of the result. Wiping them on
+    the first invocation would lose that with nothing to show for it.
+    """
+    readme = tmp_path / "README.md"
+    readme.write_text(_DOC, encoding="utf-8")
+    monkeypatch.setattr("burn_scar_recovery.runs.load_runs", lambda _: [])
+    monkeypatch.setattr("burn_scar_recovery.report.REPO_ROOT_FOR_MAIN", tmp_path, raising=False)
+    assert main() == 0
+    assert readme.read_text(encoding="utf-8") == _DOC
