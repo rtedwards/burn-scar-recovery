@@ -45,6 +45,7 @@ pipeline. Seconds is a property of the machine.
 | --- | --- |
 | `README.md` | The question, the method, the result tables |
 | `ROADMAP.md` | The build order, the phases, the measurements |
+| `docs/architecture.md` | Layers, stages, and where Ray lives |
 | `docs/glossary.md` | The approved term for each concept |
 | `docs/conventions.md` | Identifiers, coordinate systems, run records |
 | `docs/data-sources.md` | The datasets, the bands, the access rules |

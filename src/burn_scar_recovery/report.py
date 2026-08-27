@@ -25,7 +25,9 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Final
 
+from burn_scar_recovery.config import REPO_ROOT, get_settings
 from burn_scar_recovery.log import get_logger
+from burn_scar_recovery.runs import load_runs
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -166,9 +168,6 @@ def update_readme(readme: Path, records: list[RunRecord]) -> bool:
 
 def main() -> int:
     """Regenerate the README tables. Entry point for ``just report``."""
-    from burn_scar_recovery.config import REPO_ROOT, get_settings  # noqa: PLC0415
-    from burn_scar_recovery.runs import load_runs  # noqa: PLC0415
-
     records = load_runs(get_settings().results_dir)
     update_readme(REPO_ROOT / "README.md", records)
     return 0
