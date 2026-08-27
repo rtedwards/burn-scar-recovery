@@ -10,10 +10,10 @@ Skipped automatically without credentials or network; see conftest.py.
 
 from __future__ import annotations
 
-import os
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import rasterio
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -29,17 +29,6 @@ COLLECTIONS = ["HLSL30_2.0", "HLSS30_2.0"]
 CHIP = 224
 
 
-_GDAL_KEYS = (
-    "GDAL_DISABLE_READDIR_ON_OPEN",
-    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS",
-    "GDAL_HTTP_MULTIPLEX",
-    "VSI_CACHE",
-    "GDAL_HTTP_HEADERS",
-    "GDAL_HTTP_COOKIEFILE",
-    "GDAL_HTTP_COOKIEJAR",
-)
-
-
 @pytest.fixture(scope="module", autouse=True)
 def _gdal_env(
     earthdata_credentials: dict[str, str],
@@ -51,31 +40,34 @@ def _gdal_env(
     needs somewhere to keep the redirect cookie. Without the cookie jar the
     redirect lands on an HTML login page and GDAL reports the far less helpful
     "not recognized as being in a supported file format".
-    """
-    previous = {k: os.environ.get(k) for k in _GDAL_KEYS}
 
+    **Set through rasterio.Env, never through os.environ.** GDAL reads an
+    environment variable into its own config store the first time it wants it,
+    and keeps it for the life of the process. Restoring ``os.environ``
+    afterwards therefore undoes nothing: an earlier version of this fixture did
+    exactly that, and the settings leaked into every later read in the same
+    process. A DEM read that cost one 16 KiB chunk on its own began costing two
+    once this module had run, which is the sort of drift that would quietly
+    corrupt a byte measurement. ``rasterio.Env`` pushes and pops a real GDAL
+    config stack.
+    """
     cookies = tmp_path_factory.mktemp("gdal") / "cookies.txt"
-    env = {
+    options: dict[str, object] = {
         "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
         "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".tif,.TIF,.tiff",
-        "GDAL_HTTP_MULTIPLEX": "YES",
-        "VSI_CACHE": "TRUE",
+        "GDAL_HTTP_MULTIPLEX": True,
+        "VSI_CACHE": True,
         "GDAL_HTTP_COOKIEFILE": str(cookies),
         "GDAL_HTTP_COOKIEJAR": str(cookies),
     }
     token = earthdata_credentials.get("EARTHDATA_TOKEN")
     if token:
-        env["GDAL_HTTP_HEADERS"] = f"Authorization: Bearer {token}"
+        options["GDAL_HTTP_HEADERS"] = f"Authorization: Bearer {token}"
     # Without a token GDAL falls back to ~/.netrc for urs.earthdata.nasa.gov,
     # which conftest.py has already confirmed exists.
 
-    os.environ.update(env)
-    yield
-    for key, value in previous.items():
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
+    with rasterio.Env(**options):
+        yield
 
 
 @pytest.fixture(scope="module")

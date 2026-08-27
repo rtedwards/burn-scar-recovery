@@ -271,6 +271,18 @@ must use a fresh process, or must set `CPL_VSIL_CURL_NON_CACHED`.
 Phase 2 already lists `VSI_CACHE` as a knob to measure. This
 promotes it from a tuning knob to a correctness concern.
 
+**A second, related finding: GDAL's read-ahead adapts.** The same
+logical read costs 16384 bytes in a fresh process and 32768 bytes in
+a process that has already read something, and in both cases it is
+**one** request rather than two. GDAL widens the range it asks for
+once it has seen prior activity.
+
+So a byte figure carries a dependence on process history from two
+directions: the cache makes a repeat read free, and the read-ahead
+makes a first read wider. Both point the same way. **Measure in a
+fresh process**, and treat any benchmark that reuses one as
+reporting the process, not the pipeline.
+
 ---
 
 ## 2026-08-27. Ray Workflows is removed. Use the completion manifest

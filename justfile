@@ -53,11 +53,22 @@ test *ARGS:
 
 # The live S3 / CMR-STAC / Earthdata tests. Needs credentials; skips without.
 test-integration *ARGS:
-    uv run pytest tests/integration --run-all {{ ARGS }}
+    ./scripts/with-earthdata.sh uv run pytest tests/integration --run-all {{ ARGS }}
 
 # Everything, both trees, all markers enabled.
 test-all *ARGS:
-    uv run pytest --run-all {{ ARGS }}
+    ./scripts/with-earthdata.sh uv run pytest --run-all {{ ARGS }}
+
+# Report whether Earthdata credentials resolve, without printing them.
+#
+# Credentials come from the environment first, then 1Password, then the
+# application's own dotenv or ~/.netrc. See scripts/with-earthdata.sh.
+earthdata-check:
+    @./scripts/with-earthdata.sh sh -c 'if [ -n "$EARTHDATA_TOKEN" ]; then \
+        printf "EARTHDATA_TOKEN resolved, %s characters\n" "$(printf %s "$EARTHDATA_TOKEN" | wc -c | tr -d " ")"; \
+    else \
+        echo "EARTHDATA_TOKEN not resolved. Export it, add it to your dotenv file, or store it in 1Password."; \
+    fi'
 
 # Only the tests that need a CUDA device. Run this on the 5070 node.
 test-gpu *ARGS:
