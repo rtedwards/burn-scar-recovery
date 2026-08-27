@@ -31,6 +31,8 @@ from typing import Any, Final, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from burn_scar_recovery.bands import MODEL_BANDS, Band
+
 #: Length of the hex digest kept as a run identifier. 12 hex characters is 48
 #: bits, which is far beyond collision range for a few thousand runs and short
 #: enough to paste into a table cell.
@@ -55,8 +57,12 @@ class RunConfig(BaseModel):
     end_date: str = Field(default="2025-06-30", description="Inclusive ISO date.")
 
     # -- Band projection ------------------------------------------------------
-    # Six bands matching the model, plus Fmask for the probe read.
-    bands: tuple[str, ...] = Field(default=("B02", "B03", "B04", "B8A", "B11", "B12"))
+    # The six bands the model was fine-tuned on, named semantically. The STAC
+    # asset key for each one differs between the two collections -- Landsat has
+    # no B12 and no B8A at all -- so a tuple of asset keys here could only ever
+    # be correct for one of them. Resolve with burn_scar_recovery.bands at read
+    # time. Fmask is the QA band for the probe read and is not projected.
+    bands: tuple[Band, ...] = Field(default=MODEL_BANDS)
 
     # -- Chip plan ------------------------------------------------------------
     # These live here and not in Settings because phase 4 sweeps the stride.

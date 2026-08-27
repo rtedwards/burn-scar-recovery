@@ -28,7 +28,13 @@ does not matter for a scar of several thousand hectares. Access
 needs an Earthdata Login. The data sits in AWS `us-west-2`.
 
 The six model bands carry different names in the two products.
-Verify the asset keys against the STAC response in phase 1.
+**Verified against the live CMR-STAC responses for both collections.**
+
+Landsat does not merely spell them differently. It carries no `B8A`
+and no `B12` at all. One tuple of asset keys therefore cannot serve
+both products, and a configuration must hold the semantic band list
+and resolve it per collection. `burn_scar_recovery.bands` does that,
+and an integration test re-checks it against the archive.
 
 | Band | HLSS30 | HLSL30 |
 | --- | --- | --- |
@@ -39,6 +45,19 @@ Verify the asset keys against the STAC response in phase 1.
 | SWIR 1 | B11 | B06 |
 | SWIR 2 | B12 | B07 |
 | Quality | Fmask | Fmask |
+
+Every asset also has an `s3_` twin, for example `s3_B04`. Those
+resolve to `s3://` URLs and only work from `us-west-2`. That is the
+in-region path the README bottleneck table estimates, so the figure
+is measurable rather than hypothetical.
+
+`eo:cloud_cover` is in the STAC properties, so the scene-level cloud
+predicate costs no credentials and no bytes.
+
+**STAC carries no file size.** An asset entry holds only the href,
+a title, a description and roles. Asset sizes therefore need HEAD
+requests against `lp-prod-protected`, which need an Earthdata login.
+The byte figures wait on that. The manifest does not.
 
 Fmask is 1 band of 6, so the probe read costs approximately 17% of
 the bytes. Raw Sentinel-2 has 15 bands, where the same probe would
