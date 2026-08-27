@@ -137,9 +137,40 @@ that skips finished work. The partition and the completion manifest
 give that, and both are inspectable in a way a task-state database
 is not.
 
-If this ever became a scheduled production pipeline over many
-datasets, an orchestrator would sit above Ray. It would not replace
-it.
+**Ray Workflows is not an option either.** It was the obvious
+in-cluster answer for durable execution, but it was removed in Ray
+2.44 and this project pins 2.58, where the import raises. See
+`decisions.md`.
+
+## The productionization seam
+
+This project is a research result and a throughput measurement, not
+a service. But the layering above leaves one clean seam, and it
+costs nothing to keep open.
+
+An orchestrator sits **above** Ray and submits a job. It never learns
+what a chip is.
+
+| Changes | Does not change |
+| --- | --- |
+| A scheduler above Ray | Any stage |
+| A STAC sensor, for new granules | Any primitive |
+| Job submission instead of a local driver | The manifest format |
+| Alerting and cost control | The output format |
+
+**The production shape is incremental, not periodic.** HLS grows: new
+granules land every 2 to 3 days. A production version does not rerun
+the batch on a schedule. It asks CMR-STAC for tile-dates newer than
+a watermark, makes those the partitions, and appends to the
+year-partitioned GeoParquet from phase 8.
+
+That needs idempotent tasks, per-partition output, a completion
+manifest and retry with backoff. **That is phase 10 exactly.** So
+phase 10 is not reliability decoration. It is the prerequisite, and
+it is already in the plan.
+
+Keep the seam clean. Say in the writeup that it exists. Do not build
+the orchestrator on speculation.
 
 ## The package root stays light
 

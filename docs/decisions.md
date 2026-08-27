@@ -273,6 +273,34 @@ promotes it from a tuning knob to a correctness concern.
 
 ---
 
+## 2026-08-27. Ray Workflows is removed. Use the completion manifest
+
+Evaluated as a durable-execution layer, so that a killed run could
+resume from the last finished step. **It cannot be used.**
+
+`ray.workflow` was deprecated in Ray 2.44 and removed. The last
+release that contains it is `ray==2.47`. This project pins ray
+2.58.0, where the import raises:
+
+```
+RuntimeError: The experimental Ray Workflows library was deprecated
+in Ray 2.44 and has been removed.
+```
+
+It never left `stability="alpha"` in its lifetime. Documentation
+pages for it still exist and are stale, so check the installed
+package rather than the docs.
+
+**Nothing changes.** Phase 10 already specifies idempotent tasks,
+per-partition output and a completion manifest, which gives the same
+resume property with no dependency, and a text file is inspectable
+in a way a checkpoint store is not.
+
+Do not reopen this without checking `import ray.workflow` against
+the pinned version first.
+
+---
+
 ## Open decisions
 
 These need data. Do not decide them in advance.
